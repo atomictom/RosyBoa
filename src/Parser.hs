@@ -1,7 +1,7 @@
 module Parser where
 
 import Text.Printf
-import Control.Applicative hiding (empty, (<|>), (>>))
+import Control.Applicative
 import Control.Exception
 import Control.Monad
 import qualified Data.Map as Map
@@ -68,7 +68,7 @@ identifier = (:) <$> start <*> body <?> "Expected an identifier."
     start :: Parser Char
     start = letter <|> char '_'
     body :: Parser String
-    body = Parser.many (start <|> digit)
+    body = many (start <|> digit)
 
 
 instance Functor Parse where
@@ -90,37 +90,17 @@ instance Applicative Parser where
                                Fail e -> Fail e
                                Success f s' -> fmap f (parser a s')
 
-many :: Parser a -> Parser [a]
-many p = manyAcc p []
-  where
-    manyAcc :: Parser a -> [a] -> Parser [a]
-    manyAcc p acc = Parser $
-      \s -> case (parser p) s of
-              Success a s' -> parser (manyAcc p (a:acc)) s'
-              Fail e -> Success (reverse acc) s
-
-many1 :: Parser a -> Parser [a]
-many1 p = (:) <$> p <*> Parser.many p
+instance Alternative Parser where
+    empty = Parser $ \s -> Fail ""
+    a <|> b = Parser $ \s -> case parser a s of
+                               success@(Success _ _) -> success
+                               Fail _ -> parser b s
 
 (<?>) :: Parser a -> String -> Parser a
 (<?>) p e = Parser $ \s -> case parser p s of
                              Success a s' -> Success a s'
                              Fail _ -> Fail e
 
-(<|>) :: Parser a -> Parser a -> Parser a
-(<|>) a b = Parser $ \s -> case parser a s of
-                             success@(Success _ _) -> success
-                             Fail _ -> parser b s
-
-
--- -- identifier = oneOf ""
---
--- char :: Char -> String -> Parser Char
--- char c [] = ParseError $ "Expected '" ++ [c] ++ "', got nothing."
--- char c (x:xs) = case x of
---                   c -> Parser c xs
---                   _ -> ParseError $ "Expected, '" ++ [c] ++ "', got '" ++ [x] ++ "'."
---
 -- string :: String -> Parser String
 -- string [] = ParseError "Expected a quote, got nothing."
 -- string s = case char '"' s of
