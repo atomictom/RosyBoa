@@ -1,5 +1,6 @@
 module Parser where
 
+import Text.Printf
 import Control.Applicative hiding (empty, (<|>), (>>))
 import Control.Exception
 import Control.Monad
@@ -9,35 +10,45 @@ import qualified Data.Set as Set
 type ErrorMsg = String
 
 data Parse a = Fail ErrorMsg | Success a String deriving (Show)
+
 data Parser a = Parser
-              { parse :: (String -> Parse a) }
+              { parser :: (String -> Parse a) }
 
 parseResult :: String -> Parser a -> Either ErrorMsg a
-parseResult s p = case parse p s of
+parseResult s p = case parser p s of
                     Fail e -> Left e
                     Success a s -> Right a
 
 parseRemain :: String -> Parser a -> Either ErrorMsg String
-parseRemain s p = case parse p s of
+parseRemain s p = case parser p s of
                     Fail e -> Left e
                     Success a s -> Right s
 
 anyChar :: Parser Char
-anyChar = Parser parseChar
+anyChar = Parser parseAnyChar
+  where
+    parseAnyChar :: String -> Parse Char
+    parseAnyChar [] = Fail $ "Expected a character, got nothing."
+    parseAnyChar (x:xs) = Success x xs
+
+char :: Char -> Parser Char
+char c = Parser parseChar
   where
     parseChar :: String -> Parse Char
-    parseChar [] = Fail $ "Expected a character, got nothing."
-    parseChar (x:xs) = Success x xs
+    parseChar (x:xs)
+      | x == c = Success c xs
+      | otherwise = Fail $ printf "Expected '%c', got '%c'." c x
+    parseChar _ = Fail $ printf "Expected '%c', got nothing." c
 
 oneOf :: [Char] -> Parser Char
 oneOf cs = Parser parseOneOf
   where
     parseOneOf :: String -> Parse Char
-    parseOneOf [] = Fail $ "Expected one of \"" ++ cs ++ "\", got nothing."
-    parseOneOf (x:xs) = if Set.member x (Set.fromList cs)
+    parseOneOf [] = Fail $ printf "Expected one of \"%s\", got nothing." cs
+    parseOneOf (x:xs) = if x `elem` cs
                    then Success x xs
-                   else Fail $ "Expected one of \"" ++ cs ++ "\", got '" ++ [x] ++ "'."
-                   --
+                   else Fail $ printf "Expected one of \"%s\", got '%c'." cs x
+
 digit :: Parser Char
 digit = oneOf "0123456789"
 
@@ -47,17 +58,61 @@ lower = oneOf "abcdefghijklmnopqrstuvwxyz"
 upper :: Parser Char
 upper = oneOf "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
--- (<|>) :: Parser a -> Parser a -> Parser a
--- (<|>) (ParseError _) b@(Parser _ _ _) = b
--- (<|>) a _ = a
--- infixr 1 <|>
---
--- (>>) :: Parser a -> (String -> Parser b) -> Parser b
--- (>>) (ParseError e) _ = ParseError e
--- (>>) (Parser _ r) f = f r
--- infixr 5 >>
---
---
+letter :: Parser Char
+letter = lower <|> upper <?> "Expected an uppercase or lowercase letter."
+
+
+identifier :: Parser String
+identifier = (:) <$> start <*> body <?> "Expected an identifier."
+  where
+    start :: Parser Char
+    start = letter <|> char '_'
+    body :: Parser String
+    body = Parser.many (start <|> digit)
+
+
+instance Functor Parse where
+    fmap f (Fail x) = Fail x
+    fmap f (Success a s) = Success (f a) s
+
+instance Functor Parser where
+    fmap f p = Parser (\s -> fmap f ((parser p) s))
+
+instance Applicative Parse where
+    pure a = Success a ""
+    Success f s <*> Success a s' = Success (f a) s'
+    Fail e <*> _ = Fail e
+    _ <*> Fail e = Fail e
+
+instance Applicative Parser where
+    pure a = Parser (\s -> Success a s)
+    f <*> a = Parser $ \s -> case (parser f s) of
+                               Fail e -> Fail e
+                               Success f s' -> fmap f (parser a s')
+
+many :: Parser a -> Parser [a]
+many p = manyAcc p []
+  where
+    manyAcc :: Parser a -> [a] -> Parser [a]
+    manyAcc p acc = Parser $
+      \s -> case (parser p) s of
+              Success a s' -> parser (manyAcc p (a:acc)) s'
+              Fail e -> Success (reverse acc) s
+
+many1 :: Parser a -> Parser [a]
+many1 p = (:) <$> p <*> Parser.many p
+
+(<?>) :: Parser a -> String -> Parser a
+(<?>) p e = Parser $ \s -> case parser p s of
+                             Success a s' -> Success a s'
+                             Fail _ -> Fail e
+
+(<|>) :: Parser a -> Parser a -> Parser a
+(<|>) a b = Parser $ \s -> case parser a s of
+                             success@(Success _ _) -> success
+                             Fail _ -> parser b s
+
+
 -- -- identifier = oneOf ""
 --
 -- char :: Char -> String -> Parser Char

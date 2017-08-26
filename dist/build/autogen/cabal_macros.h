@@ -14,8 +14,15 @@
   (major1) == 0 && (major2) <  5 || \
   (major1) == 0 && (major2) == 5 && (minor) <= 0)
 
-/* package tasty-0.11.2.1 */
-#define VERSION_tasty "0.11.2.1"
+/* package regex-tdfa-1.2.2 */
+#define VERSION_regex_tdfa "1.2.2"
+#define MIN_VERSION_regex_tdfa(major1,major2,minor) (\
+  (major1) <  1 || \
+  (major1) == 1 && (major2) <  2 || \
+  (major1) == 1 && (major2) == 2 && (minor) <= 2)
+
+/* package tasty-0.11.2.5 */
+#define VERSION_tasty "0.11.2.5"
 #define MIN_VERSION_tasty(major1,major2,minor) (\
   (major1) <  0 || \
   (major1) == 0 && (major2) <  11 || \
@@ -28,12 +35,12 @@
   (major1) == 0 && (major2) <  9 || \
   (major1) == 0 && (major2) == 9 && (minor) <= 2)
 
-/* package tasty-quickcheck-0.8.4 */
-#define VERSION_tasty_quickcheck "0.8.4"
+/* package tasty-quickcheck-0.9.1 */
+#define VERSION_tasty_quickcheck "0.9.1"
 #define MIN_VERSION_tasty_quickcheck(major1,major2,minor) (\
   (major1) <  0 || \
-  (major1) == 0 && (major2) <  8 || \
-  (major1) == 0 && (major2) == 8 && (minor) <= 4)
+  (major1) == 0 && (major2) <  9 || \
+  (major1) == 0 && (major2) == 9 && (minor) <= 1)
 
 /* package tasty-th-0.1.7 */
 #define VERSION_tasty_th "0.1.7"
