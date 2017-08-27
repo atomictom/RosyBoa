@@ -24,12 +24,52 @@ parseRemain s p = case parser p s of
                     Fail e -> Left e
                     Success a s -> Right s
 
+instance Functor Parse where
+    fmap f (Fail x) = Fail x
+    fmap f (Success a s) = Success (f a) s
+
+instance Functor Parser where
+    fmap f p = Parser (\s -> fmap f ((parser p) s))
+
+instance Applicative Parse where
+    pure a = Success a ""
+    Success f s <*> Success a s' = Success (f a) s'
+    Fail e <*> _ = Fail e
+    _ <*> Fail e = Fail e
+
+instance Applicative Parser where
+    pure a = Parser (\s -> Success a s)
+    f <*> a = Parser $ \s -> case (parser f s) of
+                               Fail e -> Fail e
+                               Success f s' -> fmap f (parser a s')
+
+instance Alternative Parser where
+    empty = Parser $ \s -> Fail ""
+    a <|> b = Parser $ \s -> case parser a s of
+                               success@(Success _ _) -> success
+                               Fail _ -> parser b s
+
+(<?>) :: Parser a -> String -> Parser a
+(<?>) p e = Parser $ \s -> case parser p s of
+                             Success a s' -> Success a s'
+                             Fail _ -> Fail e
+
 anyChar :: Parser Char
 anyChar = Parser parseAnyChar
   where
     parseAnyChar :: String -> Parse Char
     parseAnyChar [] = Fail $ "Expected a character, got nothing."
     parseAnyChar (x:xs) = Success x xs
+
+anyBut :: String -> Parser Char
+anyBut but = Parser parseAnyBut
+  where
+    parseAnyBut :: String -> Parse Char
+    parseAnyBut [] = Fail $ "Expected a character, got nothing."
+    parseAnyBut (x:xs)
+      | x `elem` but = Fail $
+          printf "Expected any char but one of %s, got %c" but x
+      | otherwise = Success x xs
 
 char :: Char -> Parser Char
 char c = Parser parseChar
@@ -70,90 +110,24 @@ identifier = (:) <$> start <*> body <?> "Expected an identifier."
     body :: Parser String
     body = many (start <|> digit)
 
+integer :: Parser Integer
+integer = read <$> some digit
 
-instance Functor Parse where
-    fmap f (Fail x) = Fail x
-    fmap f (Success a s) = Success (f a) s
+between :: Parser a -> Parser b -> Parser b
+between s a = s *> a <* s
 
-instance Functor Parser where
-    fmap f p = Parser (\s -> fmap f ((parser p) s))
+escapedChar :: Char -> Char
+escapedChar 't' = '\t'
+escapedChar 'n' = '\n'
+escapedChar 'r' = '\r'
+escapedChar c = c
 
-instance Applicative Parse where
-    pure a = Success a ""
-    Success f s <*> Success a s' = Success (f a) s'
-    Fail e <*> _ = Fail e
-    _ <*> Fail e = Fail e
-
-instance Applicative Parser where
-    pure a = Parser (\s -> Success a s)
-    f <*> a = Parser $ \s -> case (parser f s) of
-                               Fail e -> Fail e
-                               Success f s' -> fmap f (parser a s')
-
-instance Alternative Parser where
-    empty = Parser $ \s -> Fail ""
-    a <|> b = Parser $ \s -> case parser a s of
-                               success@(Success _ _) -> success
-                               Fail _ -> parser b s
-
-(<?>) :: Parser a -> String -> Parser a
-(<?>) p e = Parser $ \s -> case parser p s of
-                             Success a s' -> Success a s'
-                             Fail _ -> Fail e
-
--- string :: String -> Parser String
--- string [] = ParseError "Expected a quote, got nothing."
--- string s = case char '"' s of
---              Parser _ r -> parseManyChars r
---              ParseError e -> ParseError e
---   where
---     parseManyChars :: String -> Parser String
---     parseManyChars [] = Parser "" ""
---     parseManyChars (x:xs) = case x of
---                               '"' -> Parser "" xs
---                               _ -> let Parser parsed remaining = parseManyChars xs
---                                    in Parser (x:parsed) remaining
---
--- many :: String -> (String -> Parser String) -> Parser String
--- many s f = case f s of
---              Parser s' r -> many r f
---
--- decimal :: String -> Parser Integer
--- decimal s = oneOf "123456789" >>
-
-
--- parseDecimal :: String -> Decimal
--- parseDecimal [] = error "Expected a decimal, got an empty string."
--- parseDecimal "0" = 0
--- parseDecimal (x:xs) = case x of
---                         '0' -> error "Expected [1-9], got 0"
---                         _ -> parseNonZeroDecimal (x:xs)
---   where
---     parseDigit :: Char -> Integer
---     parseDigit x = case x of
---                      '0' -> 0
---                      '1' -> 1
---                      '2' -> 2
---                      '3' -> 3
---                      '4' -> 4
---                      '5' -> 5
---                      '6' -> 6
---                      '7' -> 7
---                      '8' -> 8
---                      '9' -> 9
---                      _ -> error "Expected [0-9], got " ++ [x] ++ "."
---     parseNonZeroDecimal :: String -> Integer
---     parseNonZeroDecimal [] = 0
---     parseNonZeroDecimal (x:[]) = parseDigit x
---     parseNonZeroDecimal (x:xs) = parseDigit x * 10 + parseNonZeroDecimal xs
-
-    -- print $ string "\"99\""
-    -- print $ string "\"apple\"pie"
-    -- print $ string "\"[test]\""
-    -- print $ oneOf "abc" "apple" <|> oneOf "abc" "apple"
-    -- print $ oneOf "abc" "apple" <|> oneOf "abc" "xyz"
-    -- print $ oneOf "abc" "xyz" <|> oneOf "abc" "apple"
-    -- print $ oneOf "abc" "xyz" <|> oneOf "abc" "xyz"
-    -- print $ oneOf "abc" "apple" >> char 'p'
-    -- print $ oneOf "abc" "apple" >> lower
-    -- print $ oneOf "abc" "apple" >> upper
+string :: Parser String
+string = between (char '"') (many (Parser charOrEscaped))
+  where
+    charOrEscaped :: String -> Parse Char
+    charOrEscaped s
+      | ('\\':c:cs) <- s = Success (escapedChar c) cs
+      | ('"':cs)    <- s = Fail "Expected any char but '\"', but got '\"'."
+      | (c:cs)      <- s = Success c cs
+      | otherwise        = Fail "Expected a character, got nothing."
