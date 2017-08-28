@@ -4,6 +4,7 @@ import Text.Printf
 import Control.Applicative
 import Control.Exception
 import Control.Monad
+import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
@@ -113,8 +114,8 @@ identifier = (:) <$> start <*> body <?> "Expected an identifier."
 integer :: Parser Integer
 integer = read <$> some digit
 
-between :: Parser a -> Parser b -> Parser b
-between s a = s *> a <* s
+between :: Parser a -> Parser b -> Parser c -> Parser b
+between a b c = a *> b <* c
 
 escapedChar :: Char -> Char
 escapedChar 't' = '\t'
@@ -123,7 +124,7 @@ escapedChar 'r' = '\r'
 escapedChar c = c
 
 string :: Parser String
-string = between (char '"') (many (Parser charOrEscaped))
+string = between (char '"') (many (Parser charOrEscaped)) (char '"')
   where
     charOrEscaped :: String -> Parse Char
     charOrEscaped s
@@ -131,3 +132,25 @@ string = between (char '"') (many (Parser charOrEscaped))
       | ('"':cs)    <- s = Fail "Expected any char but '\"', but got '\"'."
       | (c:cs)      <- s = Success c cs
       | otherwise        = Fail "Expected a character, got nothing."
+
+space :: Parser ()
+space = const () <$> many (oneOf " \t\n\r")
+
+literal :: String -> Parser ()
+literal l = Parser parseLiteral
+  where
+    parseLiteral :: String -> Parse ()
+    parseLiteral s
+      | l `List.isPrefixOf` s = Success () (drop (length l) s)
+      | otherwise = Fail $ printf "Expected to find literal \"%s\"." l
+
+lookahead :: Parser a -> Parser ()
+lookahead p = Parser $ \s -> case parser p s of
+                               Success _ _ -> Success () s
+                               x -> x
+
+comment :: Parser String
+comment = space *> (singleLineComment <|> multiLineComment)
+  where
+    singleLineComment = literal "--" *> many (anyBut "\n\r")
+    multiLineComment = between (literal "{-") (many anyChar) (literal "-}")
