@@ -1,5 +1,6 @@
 module Parser where
 
+import Numbers
 import Text.Printf
 import Control.Applicative
 import Control.Exception
@@ -10,7 +11,7 @@ import qualified Data.Set as Set
 
 type ErrorMsg = String
 
-data Parse a = Fail ErrorMsg | Success a String deriving (Show)
+data Parse a = Fail ErrorMsg | Success a String deriving (Eq, Show)
 
 data Parser a = Parser
               { parser :: (String -> Parse a) }
@@ -41,8 +42,8 @@ instance Applicative Parse where
 instance Applicative Parser where
     pure a = Parser (\s -> Success a s)
     f <*> a = Parser $ \s -> case (parser f s) of
-                               Fail e -> Fail e
                                Success f s' -> fmap f (parser a s')
+                               Fail e -> Fail e
 
 instance Alternative Parser where
     empty = Parser $ \s -> Fail ""
@@ -50,10 +51,32 @@ instance Alternative Parser where
                                success@(Success _ _) -> success
                                Fail _ -> parser b s
 
+instance Monad Parse where
+    return = pure
+    Success a s >>= f = case f a of
+                          Success b _ -> Success b s
+                          Fail e -> Fail e
+    Fail e >>= f = Fail e
+
+instance Monad Parser where
+    return = pure
+    m >>= f = Parser $ \s -> case parser m s of
+                               Success a s' -> parser (f a) s'
+                               Fail e -> Fail e
+
+instance MonadPlus Parser where
+    mzero = empty
+    mplus = (<|>)
+
 (<?>) :: Parser a -> String -> Parser a
 (<?>) p e = Parser $ \s -> case parser p s of
                              Success a s' -> Success a s'
                              Fail _ -> Fail e
+
+infix 0 <?>
+
+fail :: String -> Parser ()
+fail s = empty <?> s
 
 anyChar :: Parser Char
 anyChar = Parser parseAnyChar
@@ -102,7 +125,6 @@ upper = oneOf "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 letter :: Parser Char
 letter = lower <|> upper <?> "Expected an uppercase or lowercase letter."
 
-
 identifier :: Parser String
 identifier = (:) <$> start <*> body <?> "Expected an identifier."
   where
@@ -111,8 +133,32 @@ identifier = (:) <$> start <*> body <?> "Expected an identifier."
     body :: Parser String
     body = many (start <|> digit)
 
+character :: Parser Char
+character = between (literal "'") (escaped <|> anyChar) (literal "'")
+  where
+    escaped = escapedChar <$> (literal "\\" *> anyChar)
+
+eof :: Parser ()
+eof = Parser $ \s -> if null s then Success () "" else Fail "Expected EOF."
+
 integer :: Parser Integer
-integer = read <$> some digit
+integer = binary <|> octal <|> hexadecimal <|> decimal
+
+binary :: Parser Integer
+binary = literal "0b" *> (readIntegerBase 2 <$> some (oneOf "01"))
+
+octal :: Parser Integer
+octal = literal "0" *> oneOf "oO" *> (readIntegerBase 8 <$> some octalDigits)
+  where
+    octalDigits = oneOf "01234567"
+
+decimal :: Parser Integer
+decimal = readIntegerBase 10 <$> some digit
+
+hexadecimal :: Parser Integer
+hexadecimal = literal "0x" *> (readIntegerBase 16 <$> some hexDigits)
+  where
+    hexDigits = oneOf "0123456789aAbBcCdDeEfF"
 
 between :: Parser a -> Parser b -> Parser c -> Parser b
 between a b c = a *> b <* c
@@ -121,36 +167,39 @@ escapedChar :: Char -> Char
 escapedChar 't' = '\t'
 escapedChar 'n' = '\n'
 escapedChar 'r' = '\r'
+escapedChar '0' = '\0'
 escapedChar c = c
 
 string :: Parser String
-string = between (char '"') (many (Parser charOrEscaped)) (char '"')
+string = between (char '"') (many (escaped <|> anyBut "\"")) (char '"')
   where
-    charOrEscaped :: String -> Parse Char
-    charOrEscaped s
-      | ('\\':c:cs) <- s = Success (escapedChar c) cs
-      | ('"':cs)    <- s = Fail "Expected any char but '\"', but got '\"'."
-      | (c:cs)      <- s = Success c cs
-      | otherwise        = Fail "Expected a character, got nothing."
+    escaped = escapedChar <$> (literal "\\" *> anyChar)
 
 space :: Parser ()
 space = const () <$> many (oneOf " \t\n\r")
 
-literal :: String -> Parser ()
+literal :: String -> Parser String
 literal l = Parser parseLiteral
   where
-    parseLiteral :: String -> Parse ()
+    parseLiteral :: String -> Parse String
     parseLiteral s
-      | l `List.isPrefixOf` s = Success () (drop (length l) s)
+      | l `List.isPrefixOf` s = Success l (drop (length l) s)
       | otherwise = Fail $ printf "Expected to find literal \"%s\"." l
 
 lookahead :: Parser a -> Parser ()
 lookahead p = Parser $ \s -> case parser p s of
                                Success _ _ -> Success () s
-                               x -> x
+                               Fail e -> Fail e
+
+anyUntil :: String -> Parser String
+anyUntil s = end <|> more <?> failure
+  where
+    end = fmap (const "") (literal s)
+    more = ((:) <$> anyChar <*> anyUntil s)
+    failure = printf "Expected to find literal \"%s\", but did not." s
 
 comment :: Parser String
 comment = space *> (singleLineComment <|> multiLineComment)
   where
     singleLineComment = literal "--" *> many (anyBut "\n\r")
-    multiLineComment = between (literal "{-") (many anyChar) (literal "-}")
+    multiLineComment = literal "{-" *> anyUntil "-}"

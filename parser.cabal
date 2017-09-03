@@ -57,6 +57,7 @@ library
   -- Modules exported by the library.
   exposed-modules:
     Parser
+    Numbers
 
   -- Modules included in this library but not exported.
   -- other-modules:
@@ -98,6 +99,7 @@ test-suite test
     Tests.hs
   build-depends:
       base ==4.6.*
+    , QuickCheck
     , regex-tdfa
     , tasty ==0.11.*
     , tasty-quickcheck ==0.9.*
