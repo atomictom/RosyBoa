@@ -179,6 +179,47 @@ test_MonadPlus =
       ]
     ]
 
+test_float = map floatTest floatCases
+  where
+    floatTest (spec, Right result) = testCase ("Success Case: " ++ spec) $
+      parser float spec @?= Success result ""
+    floatTest (spec, Left regexp) = testCase ("Failure Case: " ++ spec) $
+      assert (failRegexpMatch regexp (parser float spec))
+    floatCases :: [(String, Either String Float)]
+    floatCases =
+      [ ("0.0", Right 0.0)
+      , ("-0", Right 0.0)
+      , ("-.0", Right 0.0)
+      , ("-.1", Right (-0.1))
+      , ("1.0", Right 1.0)
+      , ("0f", Right 0.0)
+      , ("1f", Right 1.0)
+      , ("-1f", Right (-1.0))
+      , ("1.0f", Right 1.0)
+      , (".0", Right 0.0)
+      , (".1", Right 0.1)
+      , (".1f", Right 0.1)
+      , ("1e6", Right 1000000.0)
+      , (".1e6", Right 100000.0)
+      , ("1.15e6", Right 1150000.0)
+      , ("1e-6", Right 0.0000001)
+      , ("1.1e-6",Right  0.00000011)
+      , (".1e-6", Right 0.0000001)
+      , ("-1.1e-6f", Right (-0.00000011))
+      , ("Infinity", Right (read "Infinity"))
+      , ("-Infinity", Right (read "-Infinity"))
+      , ("-Infinity", Right (read "-Infinity"))
+      , ("NaN", Right (read "NaN"))
+      , ("-NaN", Right (read "NaN"))
+      , ("nan", Left ".*")
+      , ("infinity", Left ".*")
+      , ("-infinity", Left ".*")
+      , ("- Infinity", Left ".*")
+      , ("f", Left ".*")
+      , (".", Left ".*")
+      , ("-.", Left ".*")
+      ]
+
 
 test_anyChar =
     [ testCase "parseResult success" $

@@ -113,6 +113,8 @@ oneOf cs = Parser parseOneOf
                    then Success x xs
                    else Fail $ printf "Expected one of \"%s\", got '%c'." cs x
 
+
+
 digit :: Parser Char
 digit = oneOf "0123456789"
 
@@ -141,8 +143,17 @@ character = between (literal "'") (escaped <|> anyChar) (literal "'")
 eof :: Parser ()
 eof = Parser $ \s -> if null s then Success () "" else Fail "Expected EOF."
 
+optionalNegation :: Num a => Parser (a -> a)
+optionalNegation = maybeNegate <$> optional (literal "-")
+  where
+    maybeNegate (Just _) = negate
+    maybeNegate _ = id
+
+float :: Parser Float
+float = pure 1.0
+
 integer :: Parser Integer
-integer = binary <|> octal <|> hexadecimal <|> decimal
+integer = optionalNegation <*> (binary <|> octal <|> hexadecimal <|> decimal)
 
 binary :: Parser Integer
 binary = literal "0b" *> (readIntegerBase 2 <$> some (oneOf "01"))
@@ -170,13 +181,19 @@ escapedChar 'r' = '\r'
 escapedChar '0' = '\0'
 escapedChar c = c
 
+whitespaceChars :: [Char]
+whitespaceChars = " \t\n\r"
+
 string :: Parser String
 string = between (char '"') (many (escaped <|> anyBut "\"")) (char '"')
   where
     escaped = escapedChar <$> (literal "\\" *> anyChar)
 
+word :: Parser String
+word = some (anyBut whitespaceChars)
+
 space :: Parser ()
-space = const () <$> many (oneOf " \t\n\r")
+space = const () <$> many (oneOf whitespaceChars)
 
 literal :: String -> Parser String
 literal l = Parser parseLiteral
