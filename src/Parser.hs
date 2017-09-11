@@ -1,10 +1,12 @@
 module Parser where
 
 import Numbers
-import Text.Printf
 import Control.Applicative
 import Control.Exception
 import Control.Monad
+import Data.Maybe
+import System.IO.Unsafe
+import Text.Printf
 import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -85,7 +87,7 @@ anyChar = Parser parseAnyChar
     parseAnyChar [] = Fail $ "Expected a character, got nothing."
     parseAnyChar (x:xs) = Success x xs
 
-anyBut :: String -> Parser Char
+anyBut :: [Char] -> Parser Char
 anyBut but = Parser parseAnyBut
   where
     parseAnyBut :: String -> Parse Char
@@ -150,7 +152,24 @@ optionalNegation = maybeNegate <$> optional (literal "-")
     maybeNegate _ = id
 
 float :: Parser Float
-float = pure 1.0
+float = optionalNegation <*> (infinity <|> nan <|> num)
+  where
+    infinity = const (read "Infinity") <$> literal "Infinity"
+    nan = const (read "NaN") <$> literal "NaN"
+    num = do
+      first <- many digit
+      point <- maybe "" pure <$> optional (char '.')
+      second <- many digit
+      exp <- optional $ do
+        char 'e'
+        n <- maybe "" pure <$> optional (char '-')
+        e <- some digit
+        return (n ++ e)
+      f <- maybe "" pure <$> optional (char 'f')
+      let hasPointOrExponentOrF = not (null point && isNothing exp && null f)
+          hasNumber = not (null first && null second)
+      guard $ hasNumber && hasPointOrExponentOrF
+      return $ read ("0" ++ first ++ point ++ second ++ "e" ++ maybe "0" id exp)
 
 integer :: Parser Integer
 integer = optionalNegation <*> (binary <|> octal <|> hexadecimal <|> decimal)

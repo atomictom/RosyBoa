@@ -58,6 +58,7 @@ library
   exposed-modules:
     Parser
     Numbers
+    Expr
 
   -- Modules included in this library but not exported.
   -- other-modules:
