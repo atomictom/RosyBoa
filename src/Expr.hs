@@ -59,47 +59,15 @@ eval (Unary (op, _) x) = op (eval x)
 eval (Binary (op, _) x y) = op (eval x) (eval y)
 eval x = x
 
-expr2 :: Parser MathExpr
-expr2 = do
-    space
-    x <- term
-    f <- expr2'
-    return (f x)
-
-expr2' :: Parser (MathExpr -> MathExpr)
-expr2' = do
-    space
-    y <- optional ((,) <$> (space *> oneOf "+-" <* space) <*> term)
-    space
-    case y of
-      Nothing -> return id
-      Just (c, t) -> do
-        f <- expr2'
-        return $ \acc -> f (Binary (mkBinOp c) acc t)
-
 expr :: Parser MathExpr
-expr = do
-    space
-    x <- term
-    y <- optional ((,) <$> (space *> oneOf "+-" <* space) <*> expr)
-    space
-    return $ case y of
-               Nothing -> x
-               Just (c, e) -> Binary (mkBinOp c) x e
+expr = chainl1 (space *> term <* space) (Binary . mkBinOp <$> oneOf "+-")
 
 term :: Parser MathExpr
-term = do
-    space
-    x <- factor
-    y <- optional ((,) <$> (space *> oneOf "*/" <* space) <*> term)
-    space
-    return $ case y of
-               Nothing -> x
-               Just (c, t) -> Binary (mkBinOp c) x t
+term = chainl1 (space *> factor <* space) (Binary . mkBinOp <$> oneOf "*/")
 
 factor :: Parser MathExpr
 factor = asum [ FloatLit <$> float
               , IntLit <$> integer
               , Unary . mkOp <$> oneOf "+-" <*> factor
-              , between (char '(') (space *> expr <* space) (char ')')
+              , between (char '(') expr (char ')')
               ]
