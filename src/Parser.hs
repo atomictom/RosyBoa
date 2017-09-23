@@ -239,3 +239,29 @@ comment = space *> (singleLineComment <|> multiLineComment)
   where
     singleLineComment = literal "--" *> many (anyBut "\n\r")
     multiLineComment = literal "{-" *> anyUntil "-}"
+
+sepBy :: Parser b -> Parser a -> Parser [a]
+sepBy sep p = do
+    m <- optional p
+    case m of
+      Nothing -> return []
+      Just a -> (a:) <$> ((sep *> sepBy sep p) <|> return [])
+
+chainr1 :: Parser a -> Parser (a -> a -> a) -> Parser a
+chainr1 p op = do
+    x <- p
+    r <- optional ((,) <$> op <*> chainr1 p op)
+    return $ case r of
+               Nothing -> x
+               Just (g, y) -> g x y
+
+chainl1 :: Parser a -> Parser (a -> a -> a) -> Parser a
+chainl1 p op = do
+    x <- p
+    chainl1' x
+  where
+    chainl1' x = do
+      r <- optional ((,) <$> op <*> p)
+      case r of
+        Nothing -> return x
+        Just (g, y) -> chainl1' (g x y)

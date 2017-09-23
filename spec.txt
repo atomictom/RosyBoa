@@ -27,3 +27,15 @@ Expr :: Expr [+|- Term] | Term
 Term :: Term [*|- Factor] | Factor
 Factor :: Float | Integer | [+|-] Factor | (Expr)
 
+--
+
+Expr :: Expr [+|- Expr] | Term
+Term :: Term [*|- Term] | Factor
+Factor :: Float | Integer | [+|-] Factor | (Expr)
+
+
+Expr :: Term Expr'
+Expr' :: [+|- Expr] | e
+Expr' :: [+|- Term Expr'] | e
+Term :: Term [*|- Term] | Factor
+Factor :: Float | Integer | [+|-] Factor | (Expr)
