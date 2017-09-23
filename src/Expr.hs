@@ -4,6 +4,7 @@ import Parser
 import Control.Applicative
 import Control.Monad
 import Data.Foldable
+import System.IO.Unsafe
 import Text.Printf
 
 type BinOp = (MathExpr -> MathExpr -> MathExpr, String)
@@ -13,6 +14,7 @@ data MathExpr = Binary BinOp MathExpr MathExpr
           | Unary Op MathExpr
           | FloatLit Float
           | IntLit Integer
+          | Print MathExpr MathExpr
 
 instance Show MathExpr where
     show (Binary (_, opName) x y) =
@@ -20,6 +22,7 @@ instance Show MathExpr where
     show (Unary (_, opName) x) = printf "Unary (`%s` %s)" opName (show x)
     show (FloatLit f) = show f
     show (IntLit i) = show i
+    show (Print e1 e2) = printf "Print %s -> %s" (show e1) (show e2)
 
 mkOp :: Char -> Op
 mkOp '+' = (id, "+")
@@ -57,10 +60,14 @@ mkBinOp '/' = (divide, "/")
 eval :: MathExpr -> MathExpr
 eval (Unary (op, _) x) = op (eval x)
 eval (Binary (op, _) x y) = op (eval x) (eval y)
+eval (Print e1 e2) = unsafePerformIO ((putStrLn (show (eval e1))) >> return (eval e2))
 eval x = x
 
 expr :: Parser MathExpr
 expr = chainl1 (space *> term <* space) (Binary . mkBinOp <$> oneOf "+-")
+     <|> literal "print" *> do { e1 <- expr
+                               ; e2 <- expr
+                               ; return $ Print e1 e2}
 
 term :: Parser MathExpr
 term = chainl1 (space *> factor <* space) (Binary . mkBinOp <$> oneOf "*/")
