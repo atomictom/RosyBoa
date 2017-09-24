@@ -18,6 +18,11 @@ data Parse a = Fail ErrorMsg | Success a String deriving (Eq, Show)
 data Parser a = Parser
               { parser :: (String -> Parse a) }
 
+resultOr :: Parser a -> String -> a -> a
+resultOr p s d = case parser p s of
+                   Success a s -> a
+                   Fail e -> d
+
 parseResult :: String -> Parser a -> Either ErrorMsg a
 parseResult s p = case parser p s of
                     Fail e -> Left e
@@ -115,8 +120,6 @@ oneOf cs = Parser parseOneOf
                    then Success x xs
                    else Fail $ printf "Expected one of \"%s\", got '%c'." cs x
 
-
-
 digit :: Parser Char
 digit = oneOf "0123456789"
 
@@ -213,6 +216,12 @@ word = some (anyBut whitespaceChars)
 
 space :: Parser ()
 space = const () <$> many (oneOf whitespaceChars)
+
+spaced :: Parser a -> Parser a
+spaced a = space *> a <* space
+
+newline :: Parser ()
+newline = const () <$> oneOf "\n\r"
 
 literal :: String -> Parser String
 literal l = Parser parseLiteral

@@ -29,13 +29,41 @@ Factor :: Float | Integer | [+|-] Factor | (Expr)
 
 --
 
-Expr :: Expr [+|- Expr] | Term
-Term :: Term [*|- Term] | Factor
-Factor :: Float | Integer | [+|-] Factor | (Expr)
-
-
 Expr :: Term Expr'
 Expr' :: [+|- Expr] | e
 Expr' :: [+|- Term Expr'] | e
 Term :: Term [*|- Term] | Factor
 Factor :: Float | Integer | [+|-] Factor | (Expr)
+
+--
+
+Program :: Stmt+
+Stmt :: Function | While | If | Assign | Pass | Return | Print | FunctionCall
+Function :: FunctionHead Body
+FunctionHead :: "def" Identifier "(" [Identifier ["," Identifier]*] ")"
+While :: "while" Condition Body
+Return :: "return" Expr
+Assign :: Identifier "=" Expr
+FunctionCall :: Identifier "(" [Expr {"," Expr}] ")"
+	
+Body :: "{" Stmt+ "}"
+Pass :: "pass"
+Print :: "print" Expr
+If :: "if" Condition Body {elif Condition Body} [else Body]
+
+Expr :: FunctionCall | Ternary | Condition
+Ternary :: "if" Expr "then" Expr "else" Expr
+Condition :: OrList
+OrList :: AndList {"or" AndList}
+AndList :: Not {"and" Not}
+Not :: ["not"] Equality
+Equality :: Comparison [("==", "!=") Comparison]
+Comparison :: MathExpr [("<", ">", "<=", ">=") MathExpr]
+MathExpr :: Term {("+" | "-") Term}
+Term :: Factor {("*" | "/") Factor}
+Factor :: Value {"**" Value}
+Unary :: [("+" | "-")] Value
+Value :: "(" Expr ")" | Float | Integer | Bool | Char | String | Identifier
+Bool :: "True" | "False"
+Char :: "'" char "'"
+String :: "\"" string "\""
