@@ -82,8 +82,8 @@ instance MonadPlus Parser where
 
 infix 0 <?>
 
-fail :: String -> Parser ()
-fail s = empty <?> s
+failure :: String -> Parser ()
+failure s = empty <?> s
 
 anyChar :: Parser Char
 anyChar = Parser parseAnyChar
@@ -235,6 +235,9 @@ lookahead :: Parser a -> Parser ()
 lookahead p = Parser $ \s -> case parser p s of
                                Success _ _ -> Success () s
                                Fail e -> Fail e
+
+try :: Parser a -> Parser (Maybe a)
+try a = (Just <$> a) <|> (return Nothing)
 
 anyUntil :: String -> Parser String
 anyUntil s = end <|> more <?> failure

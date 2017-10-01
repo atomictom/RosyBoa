@@ -3,47 +3,148 @@ module Butt where
 import Parser
 import Control.Applicative
 import Control.Monad
+import Control.Monad.RWS
+import Data.Maybe (maybeToList)
 import Data.Foldable (asum)
+import qualified Data.Map as Map
 import System.IO.Unsafe
 import Text.Printf
 
 type Identifier = String
--- type Op = (Math -> Math, String)
 
+type Program = [Statement]
+data IfCond = IfCond Expression Program deriving Show
 data Statement = Print Expression
                | Pass
-               | While Expression [Statement]
-               | If [(Expression, [Statement])] deriving Show
+               | While Expression Program
+               | If [IfCond]
+               | Assign Identifier Expression
+               deriving Show
 
-run :: Statement -> IO ()
-run (Pass) = return ()
-run (Print e) = case (eval e) of
-                  StringLit s -> putStrLn s
-                  x -> putStrLn (show x)
-run (If []) = return ()
-run (If ((cond, stmts):cases)) = case eval cond of
-                                   BoolLit True -> mapM_ run stmts
-                                   _ -> run (If cases)
+data ButtStats = ButtStats Int [String]
+
+type SymbolTable = Map.Map Identifier Expression
+type ButtEnv = SymbolTable
+type ButtLog = ButtStats
+type ButtState = SymbolTable
+type ProgramMonad a = RWST ButtEnv ButtLog ButtState IO a
+
+instance Monoid ButtStats where
+    mempty = ButtStats 0 []
+    mappend (ButtStats i x) (ButtStats j y) = ButtStats (i+j) (x++y)
+
+tick = tell (ButtStats 1 [])
+info s = tell (ButtStats 0 [s])
+
+-- Usage: run $ resultOr statement "if True { pass }" Pass
+
+run :: Program -> IO ()
+run program = do
+    printf "--------------------\n"
+    printf "Running program...\n"
+    (_, stats) <- execRWST (mapM_ interpret program) Map.empty Map.empty
+    let ButtStats ticks logs = stats
+    printf "\n"
+    printf "--------------------\n"
+    printf "Stats:\n"
+    printf "Number of ticks: %d\n" ticks
+    printf "\n"
+    mapM_ (printf "INFO: %s\n") logs
+    printf "--------------------\n\n"
+
+interpret :: Statement -> ProgramMonad ()
+interpret Pass = do
+    tick
+    info "pass"
+    return ()
+interpret (Print e) = do
+    tick
+    x <- eval e
+    liftIO $ putStrLn $ case x of
+                          StringLit s -> s
+                          x -> (show x)
+    return ()
+interpret (If []) = do
+    tick
+    info "if-statement with no matching conditions"
+    return ()
+interpret (If (c:cs)) = do
+    tick
+    let IfCond cond stmts = c
+    x <- eval cond
+    case x of
+      BoolLit True -> do
+        tick
+        info "if-statement condition succeeded"
+        mapM_ interpret stmts
+      BoolLit False -> do
+        tick
+        info "if-statement condition failed"
+        interpret (If cs)
+      _ -> do
+        tick
+        fail "Condition did not evaluate to a boolean you little dummy"
+interpret loop@(While cond stmts) = do
+    tick
+    info "while-statement"
+    x <- eval cond
+    case x of
+      BoolLit True -> do
+        tick
+        info "while-statement condition succeeded"
+        mapM_ interpret stmts
+        interpret loop
+      BoolLit False -> do
+        tick
+        info "while-statement condition failed"
+      _ -> do
+        tick
+        fail "Condition did not evaluate to a boolean dum-dum"
+interpret (Assign id expr) = do
+    tick
+    value <- eval expr
+    info $ printf "Inserting %s as %s" id (show value)
+    modify (Map.insert id value)
 
 statement :: Parser Statement
-statement = asum [ Print <$> (literal "print" *> expr)
-                 , const Pass <$> literal "pass"
-                 , ifStmt ]
+statement = asum [ printStmt
+                 , passStmt
+                 , assignStmt
+                 , whileStmt
+                 , ifStmt ] <?> "Expected a statement."
+
+printStmt :: Parser Statement
+printStmt = Print <$> (literal "print" *> expr)
+
+passStmt :: Parser Statement
+passStmt = const Pass <$> literal "pass"
+
+assignStmt :: Parser Statement
+assignStmt = Assign <$> identifier <* spaced (literal "=") <*> expr
+
+whileStmt :: Parser Statement
+whileStmt = literal "while" *> (While <$> expr <*> stmtBody)
 
 ifStmt :: Parser Statement
 ifStmt = do
-    literal "if"
-    cond <- expr
-    body <- stmtBody
-    return $ If [(cond, body)]
-
-stmtBody :: Parser [Statement]
-stmtBody = between (spaced $ literal "{") stmts (spaced $ literal "}") 
+    x <- ifCond "if"
+    xs <- many (ifCond "elif")
+    y <- maybeToList <$> optional elseCond
+    return $ If (x : (xs ++ y))
   where
-    stmts = many (statement <* terminator) 
+    ifCond s = literal s *> (IfCond <$> expr <*> stmtBody)
+    elseCond = literal "else" *> (IfCond (BoolLit True) <$> stmtBody)
+
+program :: Parser Program
+program = many (statement <* terminator)
+  where
     terminator =  const () <$> spaced (literal ";")
               <|> const () <$> newline
               <|> const () <$> lookahead (space *> literal "}")
+              <|> lookahead (eof)
+
+stmtBody :: Parser Program
+stmtBody = between (spaced $ literal "{") program (spaced $ literal "}")
 
 data Expression = FunctionCall Identifier [Expression]
                 | Ternary Expression Expression Expression
@@ -95,42 +196,52 @@ instance Show Expression where
     show (FloatLit x) = show x
     show (IntLit x) = show x
 
+op :: (Expression -> Expression -> Expression)
+   -> Expression
+   -> Expression
+   -> ProgramMonad Expression
+op f e1 e2 = do
+    x <- eval e1
+    y <- eval e2
+    return $ f x y
 
-eval :: Expression -> Expression
-eval (Ternary cond true false) = case eval cond of
-                                   BoolLit True -> eval true
-                                   BoolLit False -> eval false
-eval (Plus e1 e2) = plus (eval e1) (eval e2)
+eval :: Expression -> ProgramMonad Expression
+eval (Ternary cond true false) = do
+    x <- eval cond
+    case x of
+      BoolLit True -> eval true
+      BoolLit False -> eval false
+eval (Plus e1 e2) = op plus e1 e2
   where
     plus (FloatLit x) (FloatLit y) = FloatLit $ x + y
     plus (FloatLit x) (IntLit y) = FloatLit $ x + (fromIntegral y)
     plus (IntLit x) (FloatLit y) = FloatLit $ (fromIntegral x) + y
     plus (IntLit x) (IntLit y) = IntLit $ x + y
-eval (Minus e1 e2) = minus (eval e1) (eval e2)
+eval (Minus e1 e2) = op minus e1 e2
   where
     minus (FloatLit x) (FloatLit y) = FloatLit $ x - y
     minus (FloatLit x) (IntLit y) = FloatLit $ x - (fromIntegral y)
     minus (IntLit x) (FloatLit y) = FloatLit $ (fromIntegral x) - y
     minus (IntLit x) (IntLit y) = IntLit $ x - y
-eval (Mult e1 e2) = multiply (eval e1) (eval e2)
+eval (Mult e1 e2) = op multiply e1 e2
   where
     multiply (FloatLit x) (FloatLit y) = FloatLit $ x * y
     multiply (FloatLit x) (IntLit y) = FloatLit $ x * (fromIntegral y)
     multiply (IntLit x) (FloatLit y) = FloatLit $ (fromIntegral x) * y
     multiply (IntLit x) (IntLit y) = IntLit $ x * y
-eval (Div e1 e2) = divide (eval e1) (eval e2)
+eval (Div e1 e2) = op divide e1 e2
   where
     divide (FloatLit x) (FloatLit y) = FloatLit $ x / y
     divide (FloatLit x) (IntLit y) = FloatLit $ x / (fromIntegral y)
     divide (IntLit x) (FloatLit y) = FloatLit $ (fromIntegral x) / y
     divide (IntLit x) (IntLit y) = IntLit $ x `div` y
-eval (Power e1 e2) = power (eval e1) (eval e2)
+eval (Power e1 e2) = op power e1 e2
   where
     power (FloatLit x) (FloatLit y) = FloatLit $ x ** y
     power (FloatLit x) (IntLit y) = FloatLit $ x ^ y
     power (IntLit x) (FloatLit y) = FloatLit $ (fromIntegral x) ** y
     power (IntLit x) (IntLit y) = IntLit $ x ^ y
-eval (Lt e1 e2) = lt (eval e1) (eval e2)
+eval (Lt e1 e2) = op lt e1 e2
   where
     lt (FloatLit x) (FloatLit y) = BoolLit $ x < y
     lt (FloatLit x) (IntLit y) = BoolLit $ x < (fromIntegral y)
@@ -139,7 +250,7 @@ eval (Lt e1 e2) = lt (eval e1) (eval e2)
     lt (StringLit x) (StringLit y) = BoolLit $ x < y
     lt (CharLit x) (CharLit y) = BoolLit $ x < y
     lt (BoolLit x) (BoolLit y) = BoolLit $ x < y
-eval (Le e1 e2) = le (eval e1) (eval e2)
+eval (Le e1 e2) = op le e1 e2
   where
     le (FloatLit x) (FloatLit y) = BoolLit $ x <= y
     le (FloatLit x) (IntLit y) = BoolLit $ x <= (fromIntegral y)
@@ -148,7 +259,7 @@ eval (Le e1 e2) = le (eval e1) (eval e2)
     le (StringLit x) (StringLit y) = BoolLit $ x <= y
     le (CharLit x) (CharLit y) = BoolLit $ x <= y
     le (BoolLit x) (BoolLit y) = BoolLit $ x <= y
-eval (Gt e1 e2) = gt (eval e1) (eval e2)
+eval (Gt e1 e2) = op gt e1 e2
   where
     gt (FloatLit x) (FloatLit y) = BoolLit $ x > y
     gt (FloatLit x) (IntLit y) = BoolLit $ x > (fromIntegral y)
@@ -157,7 +268,7 @@ eval (Gt e1 e2) = gt (eval e1) (eval e2)
     gt (StringLit x) (StringLit y) = BoolLit $ x > y
     gt (CharLit x) (CharLit y) = BoolLit $ x > y
     gt (BoolLit x) (BoolLit y) = BoolLit $ x > y
-eval (Ge e1 e2) = ge (eval e1) (eval e2)
+eval (Ge e1 e2) = op ge e1 e2
   where
     ge (FloatLit x) (FloatLit y) = BoolLit $ x >= y
     ge (FloatLit x) (IntLit y) = BoolLit $ x >= (fromIntegral y)
@@ -166,7 +277,7 @@ eval (Ge e1 e2) = ge (eval e1) (eval e2)
     ge (StringLit x) (StringLit y) = BoolLit $ x >= y
     ge (CharLit x) (CharLit y) = BoolLit $ x >= y
     ge (BoolLit x) (BoolLit y) = BoolLit $ x >= y
-eval (Eq e1 e2) = eq (eval e1) (eval e2)
+eval (Eq e1 e2) = op eq e1 e2
   where
     eq (FloatLit x) (FloatLit y) = BoolLit $ x == y
     eq (FloatLit x) (IntLit y) = BoolLit $ x == (fromIntegral y)
@@ -175,7 +286,7 @@ eval (Eq e1 e2) = eq (eval e1) (eval e2)
     eq (StringLit x) (StringLit y) = BoolLit $ x == y
     eq (CharLit x) (CharLit y) = BoolLit $ x == y
     eq (BoolLit x) (BoolLit y) = BoolLit $ x == y
-eval (Ne e1 e2) = ne (eval e1) (eval e2)
+eval (Ne e1 e2) = op ne e1 e2
   where
     ne (FloatLit x) (FloatLit y) = BoolLit $ x /= y
     ne (FloatLit x) (IntLit y) = BoolLit $ x /= (fromIntegral y)
@@ -184,26 +295,34 @@ eval (Ne e1 e2) = ne (eval e1) (eval e2)
     ne (StringLit x) (StringLit y) = BoolLit $ x /= y
     ne (CharLit x) (CharLit y) = BoolLit $ x /= y
     ne (BoolLit x) (BoolLit y) = BoolLit $ x /= y
-eval (And e1 e2) = and (eval e1) (eval e2)
+eval (And e1 e2) = op and e1 e2
   where
     and (BoolLit x) (BoolLit y) = BoolLit $ x && y
-eval (Or e1 e2) = or (eval e1) (eval e2)
+eval (Or e1 e2) = op or e1 e2
   where
     or (BoolLit x) (BoolLit y) = BoolLit $ x || y
-eval (Positive e1) = positive (eval e1)
+eval (Positive e1) = do
+    x <- eval e1
+    return $ positive x
   where
     positive (FloatLit x) = FloatLit x
     positive (IntLit x) = IntLit x
-eval (Negative e1) = negative (eval e1)
+eval (Negative e1) = do
+    x <- eval e1
+    return $ negative x
   where
     negative (FloatLit x) = FloatLit (negate x)
     negative (IntLit x) = IntLit (negate x)
-eval (Not e1) = negation (eval e1)
+eval (Not e1) = do
+    x <- eval e1
+    return $ negation x
   where
     negation (BoolLit x) = BoolLit $ not x
-eval (Lookup id) = undefined
-eval (FunctionCall id args) = undefined
-eval x = x
+eval (Lookup id) = do
+  symbols <- get
+  eval (symbols Map.! id)
+eval (FunctionCall id args) = return $ undefined
+eval x = return x
 
 ternary = do
     literal "if"
@@ -215,7 +334,7 @@ ternary = do
     return $ Ternary cond true false
 
 expr :: Parser Expression
-expr = ternary <|> condition 
+expr = ternary <|> condition <?> "Expected an expression."
 
 condition :: Parser Expression
 condition = orExpr
@@ -235,15 +354,15 @@ notExpr = do
                Just _ -> Not expr
 
 equality :: Parser Expression
-equality = chainl1 (spaced comparison) ops 
+equality = chainl1 (spaced comparison) ops
   where
     ops = asum [ const Eq <$> literal "=="
                , const Ne <$> literal "!=" ]
 
 comparison :: Parser Expression
-comparison = chainl1 (spaced mathexpr) ops 
+comparison = chainl1 (spaced mathexpr) ops
   where
-    ops = asum [ const Le <$> literal "<=" 
+    ops = asum [ const Le <$> literal "<="
                , const Ge <$> literal ">="
                , const Gt <$> literal ">"
                , const Lt <$> literal "<" ]
@@ -274,6 +393,7 @@ value = asum [ FloatLit <$> float
              , IntLit <$> integer
              , CharLit <$> character
              , StringLit <$> string
+             , Lookup <$> identifier
              , boolLit
              , between (char '(') (spaced expr) (char ')') ]
 

@@ -38,20 +38,18 @@ Factor :: Float | Integer | [+|-] Factor | (Expr)
 --
 
 Program :: Stmt+
-Stmt :: Function | While | If | Assign | Pass | Return | Print | FunctionCall
-Function :: FunctionHead Body
-FunctionHead :: "def" Identifier "(" [Identifier ["," Identifier]*] ")"
+* Stmt :: Function | While | If | Assign | Pass | Return | Print | FunctionCall
+* Function :: FunctionHead Body
+* FunctionHead :: "def" Identifier "(" [Identifier ["," Identifier]*] ")"
 While :: "while" Condition Body
 Return :: "return" Expr
 Assign :: Identifier "=" Expr
-FunctionCall :: Identifier "(" [Expr {"," Expr}] ")"
-	
+* FunctionCall :: Identifier "(" [Expr {"," Expr}] ")"
 Body :: "{" Stmt+ "}"
 Pass :: "pass"
 Print :: "print" Expr
 If :: "if" Condition Body {elif Condition Body} [else Body]
-
-Expr :: FunctionCall | Ternary | Condition
+* Expr :: FunctionCall | Ternary | Condition
 Ternary :: "if" Expr "then" Expr "else" Expr
 Condition :: OrList
 OrList :: AndList {"or" AndList}
