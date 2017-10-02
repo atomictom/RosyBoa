@@ -4,11 +4,15 @@ import Parser
 import Control.Applicative
 import Control.Monad
 import Control.Monad.RWS
+import Data.List (nub, intercalate)
 import Data.Maybe (maybeToList)
 import Data.Foldable (asum)
 import qualified Data.Map as Map
+import qualified Data.List as List
 import System.IO.Unsafe
 import Text.Printf
+
+-- run $ resultOr (program <* eof) "def test (a, b) { print \"Hello Map Reduce. \" + a + \" \" + b + \"!\" } ; test(\"Baby\", \"Butt\")" [Pass]
 
 type Identifier = String
 
@@ -19,6 +23,8 @@ data Statement = Print Expression
                | While Expression Program
                | If [IfCond]
                | Assign Identifier Expression
+               | FunctionDef Identifier [Identifier] Program
+               | CallStmt Identifier [Expression]
                deriving Show
 
 data ButtStats = ButtStats Int [String]
@@ -103,14 +109,36 @@ interpret loop@(While cond stmts) = do
 interpret (Assign id expr) = do
     tick
     value <- eval expr
-    info $ printf "Inserting %s as %s" id (show value)
+    info $ printf "Inserting variable %s as %s" id (show value)
     modify (Map.insert id value)
+interpret (FunctionDef id args stmts) = do
+    tick
+    if nub args /= args
+      then fail "There are repeated names in the arg list"
+      else return ()
+    let value = FunctionLit id args stmts
+    info $ printf "Inserting function %s as %s" id (show value)
+    modify (Map.insert id value)
+interpret (CallStmt id arg_values) = do
+    tick
+    info $ printf "Calling function %s with values [%s]" id (intercalate "," (map show arg_values))
+    args <- ask
+    env <- get
+    let symbols = Map.union args env
+        (FunctionLit _ arg_names stmts) = symbols Map.! id
+    if length arg_values /= length arg_names
+      then fail "Not all required args were provided" -- TODO add more detail
+      else return ()
+    let symbols' = Map.union (Map.fromList (zip arg_names arg_values)) symbols
+    local (const symbols') (mapM_ interpret stmts)
 
 statement :: Parser Statement
 statement = asum [ printStmt
                  , passStmt
                  , assignStmt
                  , whileStmt
+                 , functionDef
+                 , callStmt
                  , ifStmt ] <?> "Expected a statement."
 
 printStmt :: Parser Statement
@@ -134,6 +162,27 @@ ifStmt = do
   where
     ifCond s = literal s *> (IfCond <$> expr <*> stmtBody)
     elseCond = literal "else" *> (IfCond (BoolLit True) <$> stmtBody)
+
+functionDef :: Parser Statement
+functionDef = do
+    literal "def"
+    space
+    id <- identifier
+    space
+    args <- between (literal "(") argList (literal ")")
+    body <- stmtBody
+    return $ FunctionDef id args body
+  where
+    argList = sepBy (literal ",") (spaced identifier)
+
+callStmt :: Parser Statement
+callStmt = do
+    id <- identifier
+    space
+    args <- between (literal "(") argList (literal ")")
+    return $ CallStmt id args
+  where
+    argList = sepBy (literal ",") (spaced expr)
 
 program :: Parser Program
 program = many (statement <* terminator)
@@ -165,6 +214,7 @@ data Expression = FunctionCall Identifier [Expression]
                 | Negative Expression
                 | Not Expression
                 | Lookup Identifier
+                | FunctionLit Identifier [Identifier] Program
                 | FloatLit Float
                 | IntLit Integer
                 | StringLit String
@@ -172,6 +222,7 @@ data Expression = FunctionCall Identifier [Expression]
                 | BoolLit Bool
 
 instance Show Expression where
+    show (FunctionCall id args) = printf "(FunctionCall %s [%s])" id (intercalate "," (map show args))
     show (Ternary e1 e2 e3) = printf "(Ternary %s %s %s)" (show e1) (show e2) (show e3)
     show (Plus e1 e2) = printf "(Plus %s %s)" (show e1) (show e2)
     show (Minus e1 e2) = printf "(Minus %s %s)" (show e1) (show e2)
@@ -190,6 +241,10 @@ instance Show Expression where
     show (Positive e) = printf "(Positive %s)" (show e)
     show (Not e) = printf "(Not %s)" (show e)
     show (Lookup id) = printf "(Lookup %s)" id
+    show (FunctionLit id args stmts) = 
+        let show_args = intercalate "," (map show args) 
+            show_program = intercalate "," (map show stmts)
+            in printf "(FunctionCall %s [%s] {%s})" id show_args show_program
     show (BoolLit x) = show x
     show (CharLit x) = show x
     show (StringLit x) = show x
@@ -217,6 +272,7 @@ eval (Plus e1 e2) = op plus e1 e2
     plus (FloatLit x) (IntLit y) = FloatLit $ x + (fromIntegral y)
     plus (IntLit x) (FloatLit y) = FloatLit $ (fromIntegral x) + y
     plus (IntLit x) (IntLit y) = IntLit $ x + y
+    plus (StringLit x) (StringLit y) = StringLit $ x ++ y
 eval (Minus e1 e2) = op minus e1 e2
   where
     minus (FloatLit x) (FloatLit y) = FloatLit $ x - y
@@ -319,11 +375,23 @@ eval (Not e1) = do
   where
     negation (BoolLit x) = BoolLit $ not x
 eval (Lookup id) = do
-  symbols <- get
+  args <- ask
+  env <- get
+  let symbols = Map.union args env
   eval (symbols Map.! id)
 eval (FunctionCall id args) = return $ undefined
 eval x = return x
 
+functionCall :: Parser Expression
+functionCall = do
+    id <- identifier
+    space
+    args <- between (literal "(") argList (literal ")")
+    return $ FunctionCall id args
+  where
+    argList = sepBy (literal ",") expr
+
+ternary :: Parser Expression
 ternary = do
     literal "if"
     cond <- spaced expr
