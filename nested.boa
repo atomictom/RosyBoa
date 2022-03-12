@@ -1,0 +1,19 @@
+def outer(n) {
+
+  def inner(n) {
+    i = 0
+    while i < n {
+      print '.'
+      i = i + 1
+    }
+    print '\n'
+  }
+
+  i = 0
+  while i < n {
+    inner(i)
+    i = i + 1
+  }
+}
+
+outer(20)

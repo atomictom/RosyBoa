@@ -59,7 +59,7 @@ library
     Parser
     Numbers
     Expr
-    Butt
+    RosyBoa
 
   -- Modules included in this library but not exported.
   -- other-modules:

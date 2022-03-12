@@ -1,19 +1,19 @@
-module Butt where
+module RosyBoa where
 
-import Parser
-import Control.Applicative
-import Control.Monad
-import Control.Monad.RWS
-import Control.Monad.Trans.Maybe
-import Data.List (nub, intercalate)
-import Data.Maybe (maybeToList)
-import Data.Foldable (asum)
-import qualified Data.Map as Map
-import qualified Data.List as List
-import System.IO.Unsafe
-import Text.Printf
+import           Control.Applicative
+import           Control.Monad
+import           Control.Monad.RWS
+import           Control.Monad.Trans.Maybe
+import           Data.Foldable             (asum)
+import           Data.List                 (intercalate, nub)
+import qualified Data.List                 as List
+import qualified Data.Map                  as Map
+import           Data.Maybe                (maybeToList)
+import           Parser
+import           System.IO.Unsafe
+import           Text.Printf
 
--- run $ resultOr (program <* eof) "def test (a, b) { print \"Hello Map Reduce. \" + a + \" \" + b + \"!\" } ; test(\"Baby\", \"Butt\")" [Pass]
+-- run $ resultOr (program <* eof) "def test (a, b) { print \"Hello Map Reduce. \" + a + \" \" + b + \"!\" } ; test(\"Baby\", \"RosyBoa\")" [Pass]
 
 runTest :: String -> IO ()
 runTest s = run $ resultOr (program <* eof) s [Print (StringLit "Fail")]
@@ -36,23 +36,23 @@ data Statement = Print Expression
                | CallStmt Identifier [Expression]
                deriving Show
 
-data ButtStats = ButtStats Int [String]
+data RosyBoaStats = RosyBoaStats Int [String]
 
 type SymbolTable = Map.Map Identifier Expression
-type ButtEnv = SymbolTable
-type ButtLog = ButtStats
-type ButtState = SymbolTable
-type ProgramMonad a = RWST ButtEnv ButtLog ButtState IO a
+type RosyBoaEnv = SymbolTable
+type RosyBoaLog = RosyBoaStats
+type RosyBoaState = SymbolTable
+type ProgramMonad a = RWST RosyBoaEnv RosyBoaLog RosyBoaState IO a
 
-instance Monoid ButtStats where
-    mempty = ButtStats 0 []
-    mappend (ButtStats i x) (ButtStats j y) = ButtStats (i+j) (x++y)
+instance Monoid RosyBoaStats where
+    mempty = RosyBoaStats 0 []
+    mappend (RosyBoaStats i x) (RosyBoaStats j y) = RosyBoaStats (i+j) (x++y)
 
 tick :: ProgramMonad ()
-tick = tell (ButtStats 1 [])
+tick = tell (RosyBoaStats 1 [])
 
 info :: String -> ProgramMonad ()
--- info s = tell (ButtStats 0 [s]) >> liftIO (putStrLn s)
+-- info s = tell (RosyBoaStats 0 [s]) >> liftIO (putStrLn s)
 
 info s = return ()
 
@@ -70,7 +70,7 @@ run program = do
     printf "--------------------\n"
     printf "Running program...\n"
     (_, stats) <- execRWST (runMaybeT $ asum $ map (MaybeT . interpret) program) Map.empty Map.empty
-    let ButtStats ticks logs = stats
+    let RosyBoaStats ticks logs = stats
     printf "\n"
     printf "--------------------\n"
     printf "Stats:\n"
@@ -89,8 +89,8 @@ interpret (Print e) = do
     x <- eval e
     liftIO $ putStr $ case x of
                         StringLit s -> s
-                        CharLit c -> [c]
-                        x -> (show x)
+                        CharLit c   -> [c]
+                        x           -> (show x)
     return Nothing
 interpret (If []) = do
     tick
@@ -311,95 +311,95 @@ eval :: Expression -> ProgramMonad Expression
 eval (Ternary cond true false) = do
     x <- eval cond
     case x of
-      BoolLit True -> eval true
+      BoolLit True  -> eval true
       BoolLit False -> eval false
 eval (Plus e1 e2) = op plus e1 e2
   where
-    plus (FloatLit x) (FloatLit y) = FloatLit $ x + y
-    plus (FloatLit x) (IntLit y) = FloatLit $ x + (fromIntegral y)
-    plus (IntLit x) (FloatLit y) = FloatLit $ (fromIntegral x) + y
-    plus (IntLit x) (IntLit y) = IntLit $ x + y
+    plus (FloatLit x) (FloatLit y)   = FloatLit $ x + y
+    plus (FloatLit x) (IntLit y)     = FloatLit $ x + (fromIntegral y)
+    plus (IntLit x) (FloatLit y)     = FloatLit $ (fromIntegral x) + y
+    plus (IntLit x) (IntLit y)       = IntLit $ x + y
     plus (StringLit x) (StringLit y) = StringLit $ x ++ y
-    plus (StringLit x) y = StringLit $ x ++ (show y)
-    plus x (StringLit y) = StringLit $ (show x) ++ y
+    plus (StringLit x) y             = StringLit $ x ++ (show y)
+    plus x (StringLit y)             = StringLit $ (show x) ++ y
 eval (Minus e1 e2) = op minus e1 e2
   where
     minus (FloatLit x) (FloatLit y) = FloatLit $ x - y
-    minus (FloatLit x) (IntLit y) = FloatLit $ x - (fromIntegral y)
-    minus (IntLit x) (FloatLit y) = FloatLit $ (fromIntegral x) - y
-    minus (IntLit x) (IntLit y) = IntLit $ x - y
+    minus (FloatLit x) (IntLit y)   = FloatLit $ x - (fromIntegral y)
+    minus (IntLit x) (FloatLit y)   = FloatLit $ (fromIntegral x) - y
+    minus (IntLit x) (IntLit y)     = IntLit $ x - y
 eval (Mult e1 e2) = op multiply e1 e2
   where
     multiply (FloatLit x) (FloatLit y) = FloatLit $ x * y
-    multiply (FloatLit x) (IntLit y) = FloatLit $ x * (fromIntegral y)
-    multiply (IntLit x) (FloatLit y) = FloatLit $ (fromIntegral x) * y
-    multiply (IntLit x) (IntLit y) = IntLit $ x * y
+    multiply (FloatLit x) (IntLit y)   = FloatLit $ x * (fromIntegral y)
+    multiply (IntLit x) (FloatLit y)   = FloatLit $ (fromIntegral x) * y
+    multiply (IntLit x) (IntLit y)     = IntLit $ x * y
 eval (Div e1 e2) = op divide e1 e2
   where
     divide (FloatLit x) (FloatLit y) = FloatLit $ x / y
-    divide (FloatLit x) (IntLit y) = FloatLit $ x / (fromIntegral y)
-    divide (IntLit x) (FloatLit y) = FloatLit $ (fromIntegral x) / y
-    divide (IntLit x) (IntLit y) = IntLit $ x `div` y
+    divide (FloatLit x) (IntLit y)   = FloatLit $ x / (fromIntegral y)
+    divide (IntLit x) (FloatLit y)   = FloatLit $ (fromIntegral x) / y
+    divide (IntLit x) (IntLit y)     = IntLit $ x `div` y
 eval (Power e1 e2) = op power e1 e2
   where
     power (FloatLit x) (FloatLit y) = FloatLit $ x ** y
-    power (FloatLit x) (IntLit y) = FloatLit $ x ^ y
-    power (IntLit x) (FloatLit y) = FloatLit $ (fromIntegral x) ** y
-    power (IntLit x) (IntLit y) = IntLit $ x ^ y
+    power (FloatLit x) (IntLit y)   = FloatLit $ x ^ y
+    power (IntLit x) (FloatLit y)   = FloatLit $ (fromIntegral x) ** y
+    power (IntLit x) (IntLit y)     = IntLit $ x ^ y
 eval (Lt e1 e2) = op lt e1 e2
   where
-    lt (FloatLit x) (FloatLit y) = BoolLit $ x < y
-    lt (FloatLit x) (IntLit y) = BoolLit $ x < (fromIntegral y)
-    lt (IntLit x) (FloatLit y) = BoolLit $ (fromIntegral x) < y
-    lt (IntLit x) (IntLit y) = BoolLit $ x < y
+    lt (FloatLit x) (FloatLit y)   = BoolLit $ x < y
+    lt (FloatLit x) (IntLit y)     = BoolLit $ x < (fromIntegral y)
+    lt (IntLit x) (FloatLit y)     = BoolLit $ (fromIntegral x) < y
+    lt (IntLit x) (IntLit y)       = BoolLit $ x < y
     lt (StringLit x) (StringLit y) = BoolLit $ x < y
-    lt (CharLit x) (CharLit y) = BoolLit $ x < y
-    lt (BoolLit x) (BoolLit y) = BoolLit $ x < y
+    lt (CharLit x) (CharLit y)     = BoolLit $ x < y
+    lt (BoolLit x) (BoolLit y)     = BoolLit $ x < y
 eval (Le e1 e2) = op le e1 e2
   where
-    le (FloatLit x) (FloatLit y) = BoolLit $ x <= y
-    le (FloatLit x) (IntLit y) = BoolLit $ x <= (fromIntegral y)
-    le (IntLit x) (FloatLit y) = BoolLit $ (fromIntegral x) <= y
-    le (IntLit x) (IntLit y) = BoolLit $ x <= y
+    le (FloatLit x) (FloatLit y)   = BoolLit $ x <= y
+    le (FloatLit x) (IntLit y)     = BoolLit $ x <= (fromIntegral y)
+    le (IntLit x) (FloatLit y)     = BoolLit $ (fromIntegral x) <= y
+    le (IntLit x) (IntLit y)       = BoolLit $ x <= y
     le (StringLit x) (StringLit y) = BoolLit $ x <= y
-    le (CharLit x) (CharLit y) = BoolLit $ x <= y
-    le (BoolLit x) (BoolLit y) = BoolLit $ x <= y
+    le (CharLit x) (CharLit y)     = BoolLit $ x <= y
+    le (BoolLit x) (BoolLit y)     = BoolLit $ x <= y
 eval (Gt e1 e2) = op gt e1 e2
   where
-    gt (FloatLit x) (FloatLit y) = BoolLit $ x > y
-    gt (FloatLit x) (IntLit y) = BoolLit $ x > (fromIntegral y)
-    gt (IntLit x) (FloatLit y) = BoolLit $ (fromIntegral x) > y
-    gt (IntLit x) (IntLit y) = BoolLit $ x > y
+    gt (FloatLit x) (FloatLit y)   = BoolLit $ x > y
+    gt (FloatLit x) (IntLit y)     = BoolLit $ x > (fromIntegral y)
+    gt (IntLit x) (FloatLit y)     = BoolLit $ (fromIntegral x) > y
+    gt (IntLit x) (IntLit y)       = BoolLit $ x > y
     gt (StringLit x) (StringLit y) = BoolLit $ x > y
-    gt (CharLit x) (CharLit y) = BoolLit $ x > y
-    gt (BoolLit x) (BoolLit y) = BoolLit $ x > y
+    gt (CharLit x) (CharLit y)     = BoolLit $ x > y
+    gt (BoolLit x) (BoolLit y)     = BoolLit $ x > y
 eval (Ge e1 e2) = op ge e1 e2
   where
-    ge (FloatLit x) (FloatLit y) = BoolLit $ x >= y
-    ge (FloatLit x) (IntLit y) = BoolLit $ x >= (fromIntegral y)
-    ge (IntLit x) (FloatLit y) = BoolLit $ (fromIntegral x) >= y
-    ge (IntLit x) (IntLit y) = BoolLit $ x >= y
+    ge (FloatLit x) (FloatLit y)   = BoolLit $ x >= y
+    ge (FloatLit x) (IntLit y)     = BoolLit $ x >= (fromIntegral y)
+    ge (IntLit x) (FloatLit y)     = BoolLit $ (fromIntegral x) >= y
+    ge (IntLit x) (IntLit y)       = BoolLit $ x >= y
     ge (StringLit x) (StringLit y) = BoolLit $ x >= y
-    ge (CharLit x) (CharLit y) = BoolLit $ x >= y
-    ge (BoolLit x) (BoolLit y) = BoolLit $ x >= y
+    ge (CharLit x) (CharLit y)     = BoolLit $ x >= y
+    ge (BoolLit x) (BoolLit y)     = BoolLit $ x >= y
 eval (Eq e1 e2) = op eq e1 e2
   where
-    eq (FloatLit x) (FloatLit y) = BoolLit $ x == y
-    eq (FloatLit x) (IntLit y) = BoolLit $ x == (fromIntegral y)
-    eq (IntLit x) (FloatLit y) = BoolLit $ (fromIntegral x) == y
-    eq (IntLit x) (IntLit y) = BoolLit $ x == y
+    eq (FloatLit x) (FloatLit y)   = BoolLit $ x == y
+    eq (FloatLit x) (IntLit y)     = BoolLit $ x == (fromIntegral y)
+    eq (IntLit x) (FloatLit y)     = BoolLit $ (fromIntegral x) == y
+    eq (IntLit x) (IntLit y)       = BoolLit $ x == y
     eq (StringLit x) (StringLit y) = BoolLit $ x == y
-    eq (CharLit x) (CharLit y) = BoolLit $ x == y
-    eq (BoolLit x) (BoolLit y) = BoolLit $ x == y
+    eq (CharLit x) (CharLit y)     = BoolLit $ x == y
+    eq (BoolLit x) (BoolLit y)     = BoolLit $ x == y
 eval (Ne e1 e2) = op ne e1 e2
   where
-    ne (FloatLit x) (FloatLit y) = BoolLit $ x /= y
-    ne (FloatLit x) (IntLit y) = BoolLit $ x /= (fromIntegral y)
-    ne (IntLit x) (FloatLit y) = BoolLit $ (fromIntegral x) /= y
-    ne (IntLit x) (IntLit y) = BoolLit $ x /= y
+    ne (FloatLit x) (FloatLit y)   = BoolLit $ x /= y
+    ne (FloatLit x) (IntLit y)     = BoolLit $ x /= (fromIntegral y)
+    ne (IntLit x) (FloatLit y)     = BoolLit $ (fromIntegral x) /= y
+    ne (IntLit x) (IntLit y)       = BoolLit $ x /= y
     ne (StringLit x) (StringLit y) = BoolLit $ x /= y
-    ne (CharLit x) (CharLit y) = BoolLit $ x /= y
-    ne (BoolLit x) (BoolLit y) = BoolLit $ x /= y
+    ne (CharLit x) (CharLit y)     = BoolLit $ x /= y
+    ne (BoolLit x) (BoolLit y)     = BoolLit $ x /= y
 eval (And e1 e2) = op and e1 e2
   where
     and (BoolLit x) (BoolLit y) = BoolLit $ x && y
@@ -411,13 +411,13 @@ eval (Positive e1) = do
     return $ positive x
   where
     positive (FloatLit x) = FloatLit x
-    positive (IntLit x) = IntLit x
+    positive (IntLit x)   = IntLit x
 eval (Negative e1) = do
     x <- eval e1
     return $ negative x
   where
     negative (FloatLit x) = FloatLit (negate x)
-    negative (IntLit x) = IntLit (negate x)
+    negative (IntLit x)   = IntLit (negate x)
 eval (Not e1) = do
     x <- eval e1
     return $ negation x
@@ -443,7 +443,7 @@ eval (FunctionCall id arg_exprs) = do
     result <- local (const args') (runMaybeT $ asum $ map (MaybeT . interpret) stmts)
     put env -- Restore the environment
     case result of
-      Just x -> return x
+      Just x  -> return x
       Nothing -> fail "Function did not return a value"
 eval x = return x
 
@@ -490,7 +490,7 @@ notExpr = do
     expr <- equality
     return $ case not of
                Nothing -> expr
-               Just _ -> Not expr
+               Just _  -> Not expr
 
 equality :: Parser Expression
 equality = chainl1 (spaced comparison) ops

@@ -1,0 +1,23 @@
+if 1 == 1 {
+  print "hi"
+  print "bye"
+}
+
+def fib(n) {
+  if n == 0 or n == 1 {
+    return 1
+  }
+  x = 1
+  y = 1
+  count = 1
+  while count < n {
+    print x;
+    old_x = x;
+    x = x + y;
+    y = old_x;
+    count = count + 1;
+  }
+  return x
+}
+
+fib(20)
