@@ -13,10 +13,11 @@ import           Parser
 import           System.IO.Unsafe
 import           Text.Printf
 
--- run $ resultOr (program <* eof) "def test (a, b) { print \"Hello Map Reduce. \" + a + \" \" + b + \"!\" } ; test(\"Baby\", \"RosyBoa\")" [Pass]
+compileAndRun :: String -> IO ()
+compileAndRun s = case parseResult s (program <* eof) of
+                       Right p -> run p
+                       Left e -> printf "Failed to parse with error:\n\n%s\n" e
 
-runTest :: String -> IO ()
-runTest s = run $ resultOr (program <* eof) s [Print (StringLit "Fail") True]
 
 showSymbols :: SymbolTable -> String
 showSymbols sym = Map.foldlWithKey (\s k x -> s ++ printf "  %s: %s\n" k (show x)) "\n" sym

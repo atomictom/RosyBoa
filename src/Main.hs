@@ -11,7 +11,7 @@ main = do
   case args of
        [filename] -> do
          contents <- readFile filename
-         runTest contents
+         compileAndRun contents
        _ -> do
           self <- getProgName
           printf "Usage: ./%s [filename]" self
