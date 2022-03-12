@@ -12,7 +12,7 @@ name:
 --                   | | +----- non-breaking API additions
 --                   | | | +--- code changes with no API change
 version:
-  0.0.0.1
+  0.0.0.2
 
 -- A short (one-line) description of the package.
 -- synopsis:
@@ -70,27 +70,32 @@ library
   -- Other library packages from which modules are imported.
   build-depends:
     base
-    , containers ==0.5.*
+    , containers
     , mtl
+    , transformers
     , either
 
 
--- executable parser
---   -- .hs or .lhs file containing the Main module.
---   main-is:
---     Main.hs
---   -- Modules included in this executable, other than Main.
---   -- other-modules:
---
---   -- Other library packages from which modules are imported.
---   build-depends:
---       base ==4.6.*
---     , parser
---
---   -- Directories containing source files.
---   hs-source-dirs:
---     src
---
+executable parser
+  -- .hs or .lhs file containing the Main module.
+  main-is:
+    Main.hs
+  -- Modules included in this executable, other than Main.
+  -- other-modules:
+
+  -- Other library packages from which modules are imported.
+  build-depends:
+      base
+    , parser
+    , containers
+    , mtl
+    , transformers
+    , either
+
+  -- Directories containing source files.
+  hs-source-dirs:
+    src
+
 
 test-suite test
   default-language:

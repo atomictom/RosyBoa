@@ -7,7 +7,7 @@ import           Control.Monad.Trans.Maybe
 import           Data.Foldable             (asum)
 import           Data.List                 (intercalate, nub)
 import qualified Data.List                 as List
-import qualified Data.Map                  as Map
+import qualified Data.Map.Strict           as Map
 import           Data.Maybe                (maybeToList)
 import           Parser
 import           System.IO.Unsafe

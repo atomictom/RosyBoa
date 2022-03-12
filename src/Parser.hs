@@ -1,15 +1,15 @@
 module Parser where
 
-import Numbers
-import Control.Applicative
-import Control.Exception
-import Control.Monad
-import Data.Maybe
-import System.IO.Unsafe
-import Text.Printf
-import qualified Data.List as List
-import qualified Data.Map as Map
-import qualified Data.Set as Set
+import           Control.Applicative
+import           Control.Exception
+import           Control.Monad
+import qualified Data.List           as List
+import qualified Data.Map.Strict     as Map
+import           Data.Maybe
+import qualified Data.Set            as Set
+import           Numbers
+import           System.IO.Unsafe
+import           Text.Printf
 
 type ErrorMsg = String
 
@@ -21,20 +21,20 @@ data Parser a = Parser
 resultOr :: Parser a -> String -> a -> a
 resultOr p s d = case parser p s of
                    Success a s -> a
-                   Fail e -> d
+                   Fail e      -> d
 
 parseResult :: String -> Parser a -> Either ErrorMsg a
 parseResult s p = case parser p s of
-                    Fail e -> Left e
+                    Fail e      -> Left e
                     Success a s -> Right a
 
 parseRemain :: String -> Parser a -> Either ErrorMsg String
 parseRemain s p = case parser p s of
-                    Fail e -> Left e
+                    Fail e      -> Left e
                     Success a s -> Right s
 
 instance Functor Parse where
-    fmap f (Fail x) = Fail x
+    fmap f (Fail x)      = Fail x
     fmap f (Success a s) = Success (f a) s
 
 instance Functor Parser where
@@ -50,26 +50,26 @@ instance Applicative Parser where
     pure a = Parser (\s -> Success a s)
     f <*> a = Parser $ \s -> case (parser f s) of
                                Success f s' -> fmap f (parser a s')
-                               Fail e -> Fail e
+                               Fail e       -> Fail e
 
 instance Alternative Parser where
     empty = Parser $ \s -> Fail ""
     a <|> b = Parser $ \s -> case parser a s of
                                success@(Success _ _) -> success
-                               Fail _ -> parser b s
+                               Fail _                -> parser b s
 
 instance Monad Parse where
     return = pure
     Success a s >>= f = case f a of
                           Success b _ -> Success b s
-                          Fail e -> Fail e
+                          Fail e      -> Fail e
     Fail e >>= f = Fail e
 
 instance Monad Parser where
     return = pure
     m >>= f = Parser $ \s -> case parser m s of
                                Success a s' -> parser (f a) s'
-                               Fail e -> Fail e
+                               Fail e       -> Fail e
 
 instance MonadPlus Parser where
     mzero = empty
@@ -78,7 +78,7 @@ instance MonadPlus Parser where
 (<?>) :: Parser a -> String -> Parser a
 (<?>) p e = Parser $ \s -> case parser p s of
                              Success a s' -> Success a s'
-                             Fail _ -> Fail e
+                             Fail _       -> Fail e
 
 infix 0 <?>
 
@@ -89,7 +89,7 @@ anyChar :: Parser Char
 anyChar = Parser parseAnyChar
   where
     parseAnyChar :: String -> Parse Char
-    parseAnyChar [] = Fail $ "Expected a character, got nothing."
+    parseAnyChar []     = Fail $ "Expected a character, got nothing."
     parseAnyChar (x:xs) = Success x xs
 
 anyBut :: [Char] -> Parser Char
@@ -152,7 +152,7 @@ optionalNegation :: Num a => Parser (a -> a)
 optionalNegation = maybeNegate <$> optional (literal "-")
   where
     maybeNegate (Just _) = negate
-    maybeNegate _ = id
+    maybeNegate _        = id
 
 float :: Parser Float
 float = optionalNegation <*> (infinity <|> nan <|> num)
@@ -201,7 +201,7 @@ escapedChar 't' = '\t'
 escapedChar 'n' = '\n'
 escapedChar 'r' = '\r'
 escapedChar '0' = '\0'
-escapedChar c = c
+escapedChar c   = c
 
 whitespaceChars :: [Char]
 whitespaceChars = " \t\n\r"
@@ -240,7 +240,7 @@ literal l = Parser parseLiteral
 lookahead :: Parser a -> Parser ()
 lookahead p = Parser $ \s -> case parser p s of
                                Success _ _ -> Success () s
-                               Fail e -> Fail e
+                               Fail e      -> Fail e
 
 try :: Parser a -> Parser (Maybe a)
 try a = (Just <$> a) <|> (return Nothing)
@@ -266,14 +266,14 @@ sepBy sep p = do
     m <- optional p
     case m of
       Nothing -> return []
-      Just a -> (a:) <$> ((sep *> sepBy sep p) <|> return [])
+      Just a  -> (a:) <$> ((sep *> sepBy sep p) <|> return [])
 
 chainr1 :: Parser a -> Parser (a -> a -> a) -> Parser a
 chainr1 p op = do
     x <- p
     r <- optional ((,) <$> op <*> chainr1 p op)
     return $ case r of
-               Nothing -> x
+               Nothing     -> x
                Just (g, y) -> g x y
 
 chainl1 :: Parser a -> Parser (a -> a -> a) -> Parser a
@@ -284,5 +284,5 @@ chainl1 p op = do
     chainl1' x = do
       r <- optional ((,) <$> op <*> p)
       case r of
-        Nothing -> return x
+        Nothing     -> return x
         Just (g, y) -> chainl1' (g x y)

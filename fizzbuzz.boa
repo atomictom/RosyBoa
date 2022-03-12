@@ -7,13 +7,14 @@ def fizzbuzz(n) {
   i = 1
   while i <= n {
     if mod(i, 15) == 0 {
-      print "Fizzbuzz"
+      print "Fizzbuzz\n"
     } elif mod(i, 5) == 0 {
-      print "Buzz"
+      print "Buzz\n"
     } elif mod(i, 3) == 0 {
-      print "Fizz"
+      print "Fizz\n"
     } else {
       print i
+      print "\n"
     }
     i = i + 1
   }
