@@ -215,10 +215,16 @@ word :: Parser String
 word = some (anyBut whitespaceChars)
 
 space :: Parser ()
-space = const () <$> many (oneOf whitespaceChars)
+space = const () <$> many (oneOf " \t")
+
+anySpace :: Parser ()
+anySpace = const () <$> many (oneOf " \t\n\r")
 
 spaced :: Parser a -> Parser a
 spaced a = space *> a <* space
+
+ignored :: Parser ()
+ignored = (const () <$> many comment) <|> space
 
 newline :: Parser ()
 newline = const () <$> oneOf "\n\r"
@@ -239,6 +245,9 @@ lookahead p = Parser $ \s -> case parser p s of
 try :: Parser a -> Parser (Maybe a)
 try a = (Just <$> a) <|> (return Nothing)
 
+eol :: Parser ()
+eol = const () <$> (many (oneOf " \t") *> oneOf "\n\r")
+
 anyUntil :: String -> Parser String
 anyUntil s = end <|> more <?> failure
   where
@@ -249,7 +258,7 @@ anyUntil s = end <|> more <?> failure
 comment :: Parser String
 comment = space *> (singleLineComment <|> multiLineComment)
   where
-    singleLineComment = literal "--" *> many (anyBut "\n\r")
+    singleLineComment = literal "--" *> many (anyBut "\n\r") <* lookahead newline
     multiLineComment = literal "{-" *> anyUntil "-}"
 
 sepBy :: Parser b -> Parser a -> Parser [a]

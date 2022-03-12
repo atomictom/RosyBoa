@@ -69,8 +69,10 @@ library
 
   -- Other library packages from which modules are imported.
   build-depends:
-    base ==4.6.*
+    base
     , containers ==0.5.*
+    , mtl
+    , either
 
 
 -- executable parser
@@ -100,7 +102,8 @@ test-suite test
   main-is:
     Tests.hs
   build-depends:
-      base ==4.6.*
+      base
+    , either
     , QuickCheck
     , regex-tdfa
     , tasty ==0.11.*
