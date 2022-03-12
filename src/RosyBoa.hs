@@ -8,7 +8,7 @@ import           Data.Foldable             (asum)
 import           Data.List                 (intercalate, nub)
 import qualified Data.List                 as List
 import qualified Data.Map.Strict           as Map
-import           Data.Maybe                (maybeToList)
+import           Data.Maybe                (isJust, maybeToList)
 import           Parser
 import           System.IO.Unsafe
 import           Text.Printf
@@ -16,7 +16,7 @@ import           Text.Printf
 -- run $ resultOr (program <* eof) "def test (a, b) { print \"Hello Map Reduce. \" + a + \" \" + b + \"!\" } ; test(\"Baby\", \"RosyBoa\")" [Pass]
 
 runTest :: String -> IO ()
-runTest s = run $ resultOr (program <* eof) s [Print (StringLit "Fail")]
+runTest s = run $ resultOr (program <* eof) s [Print (StringLit "Fail") True]
 
 showSymbols :: SymbolTable -> String
 showSymbols sym = Map.foldlWithKey (\s k x -> s ++ printf "  %s: %s\n" k (show x)) "\n" sym
@@ -26,7 +26,7 @@ type Identifier = String
 
 type Program = [Statement]
 data IfCond = IfCond Expression Program deriving Show
-data Statement = Print Expression
+data Statement = Print Expression Bool
                | Pass
                | While Expression Program
                | If [IfCond]
@@ -84,10 +84,11 @@ interpret Pass = do
     tick
     info "pass"
     return Nothing
-interpret (Print e) = do
+interpret (Print e newline) = do
     tick
     x <- eval e
-    liftIO $ putStr $ case x of
+    let printer = if newline then putStrLn else putStr
+    liftIO $ printer $ case x of
                         StringLit s -> s
                         CharLit c   -> [c]
                         x           -> (show x)
@@ -186,7 +187,11 @@ statement = asum  [ printStmt
                   <?> "Expected a statement."
 
 printStmt :: Parser Statement
-printStmt = Print <$> (literal "print" *> expr)
+printStmt = do
+  literal "print"
+  newline <- isJust <$> optional (literal "ln")
+  e <- expr
+  return $ Print e newline
 
 passStmt :: Parser Statement
 passStmt = const Pass <$> literal "pass"
