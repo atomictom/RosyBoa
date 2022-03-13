@@ -1,3 +1,4 @@
+-- Lazy language designer didn't add a modulo operator!
 def mod(a, b) {
   n = a / b
   return (a - (n * b))

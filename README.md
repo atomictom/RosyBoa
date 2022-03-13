@@ -16,6 +16,78 @@ stack run source.boa
 Should do the trick once it has downloaded all dependencies. An EBNF-like
 grammar is specified in spec.txt.
 
+## Demo
+
+```
+$ cat fizzbuzz.boa
+-- Lazy language designer didn't add a modulo operator!
+def mod(a, b) {
+  n = a / b
+  return (a - (n * b))
+}
+
+def fizzbuzz(n) {
+  i = 1
+  while i <= n {
+    if mod(i, 15) == 0 {
+      println "Fizzbuzz"
+    } elif mod(i, 5) == 0 {
+      println "Buzz"
+    } elif mod(i, 3) == 0 {
+      println "Fizz"
+    } else {
+      println i
+    }
+    i = i + 1
+  }
+}
+
+fizzbuzz(30)
+```
+
+```
+$ stack run fizzbuzz.boa
+--------------------
+Running program...
+1
+2
+Fizz
+4
+Buzz
+Fizz
+7
+8
+Fizz
+Buzz
+11
+Fizz
+13
+14
+Fizzbuzz
+16
+17
+Fizz
+19
+Buzz
+Fizz
+22
+23
+Fizz
+Buzz
+26
+Fizz
+28
+29
+Fizzbuzz
+
+--------------------
+Stats:
+Number of ticks: 486
+
+--------------------
+```
+
+
 ## History
 
 This started when I was on an airplane and wanted to program something in
